@@ -76,16 +76,19 @@ zabbix_agent_install () {
         exit 1
     fi
 
+    #Verificação do Ubuntu
+    ubuntu_versao=$(grep -i "DISTRIB_RELEASE=" /etc/lsb-release | cut -d = -f 2)
+
     #Instação dos repositórios
-    wget https://repo.zabbix.com/zabbix/6.0/ubuntu/pool/main/z/zabbix-release/zabbix-release_6.0-4+ubuntu20.04_all.deb
-    sudo dpkg -i zabbix-release_6.0-4+ubuntu20.04_all.deb
+    wget https://repo.zabbix.com/zabbix/6.0/ubuntu/pool/main/z/zabbix-release/zabbix-release_6.0-4+ubuntu"$ubuntu_versao"_all.deb
+    sudo dpkg -i zabbix-release_6.0-4+ubuntu"$ubuntu_versao"_all.deb
     sudo apt update
 
     #Instalação do Zabbix-Agent2
     apt install zabbix-agent2 zabbix-agent2-plugin-*
 
     #Inicialização pelo boot e start do zabbix-agent2
-    systemctl enalbe zabbix-agent2
+    systemctl enable zabbix-agent2
     systemctl restart zabbix-agent2
 
 }
