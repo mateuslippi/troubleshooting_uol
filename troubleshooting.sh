@@ -10,7 +10,7 @@
 # comandos muito úteis para a realização de troubleshooting nos servidores Linux.
 #
 # Exemplos:
-#     $ ./troubleshooting.sh -d - Fará a verificação de uso de espaço em disco
+#     $ ./troubleshooting.sh --verificar-disco - Fará a verificação de uso de espaço em disco
 #       e irá exibir o sistema de arquivos das partições.
 # ------------------------------------------------------------------------ #
 # Histórico:
@@ -23,15 +23,15 @@
 MENSAGEM_USO="
      $(basename "$0") - [OPÇÕES]
 
-        -h - Menu de ajuda
-        -v - Versão do programa
-        -d - Realiza a verificação de espaço em disco e exibe
+        -h, --ajuda - Menu de ajuda
+        -v, --versao - Versão do programa
+        -d, --verificar-disco - Realiza a verificação de espaço em disco e exibe
              o sistema de arquivos utilizado nas partições.
-        -n - Realiza uma varredura de hosts na rede informada e envia
+        -n, --scanear-rede REDE - Realiza uma varredura de hosts na rede informada e envia
              para o arquivo 'hosts.txt'
-        -j - Exibe uma lista de jumpers Linux.
+        -j, --lista-jumpers - Exibe uma lista de jumpers Linux.
 
-        -z - Realiza a instalação completa do ZabbixAgent2 (Disponível por enquanto só para Ubuntu 20.04 LTS)
+        -z, --instalar-zabbix - Realiza a instalação completa do ZabbixAgent2 (Disponível por enquanto só para Ubuntu 20.04 LTS)
 "
 MENSAGEM_JUMPER="
 
@@ -43,8 +43,9 @@ MENSAGEM_JUMPER="
 
 FLAG_VERIFICAR_DISCO=0
 FLAG_SCANEAR_REDE=0
-FLAG_CHECK_CERT=0
-FLAG_ZABBIX_AGENT_INSTALL=0
+FLAG_CHECAR_CERTIFICADO=0
+FLAG_INSTALAR_AGENTE2_ZABBIX=0
+FLAG_VALIDACAO_DNS=0
 # -----------------------TESTES--------------------------------------------- #
 
 # root?
@@ -58,13 +59,24 @@ scanear_rede() {
     nmap "$1" > hosts.txt
 }
 
-check_certi() {
-    curl -v --silent "$1" --stderr - | grep -i 'Server Certificate\|subject\|start date\|expire date'
+checar_certificado() {
+    curl -v --silent "https://$1" --stderr - | grep -i 'Server Certificate\|subject\|start date\|expire date'
 
 }
 
+validar_dns() {
+    saida=$(dig $1 +short)
+
+    if [ -z $saida ]; then
+        echo "Não existe um registro DNS do tipo A associado a este host."
+        exit 0
+    fi
+
+    dig $1 +short
+}
+
 #Função disponível por enquanto só para o Ubuntu 20.04 LTS
-zabbix_agent_install () {
+instalar_agente2_zabbix () {
     #root?
     [ $UID -ne 0 ] && echo "Por favor, execute este programa como root" && exit 1
 
@@ -93,45 +105,52 @@ zabbix_agent_install () {
 
 }
 # ---------------------- EXECUÇÃO ----------------------------------------- #
-while getopts ":hjvdnzc:" opcao; do
-    case $opcao in
-        h)
+
+#TRATAMENTO DE PARÂMETROS
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -h|--ajuda)
             echo "$MENSAGEM_USO"
             exit 0
             ;;
-
-        j)  
+        -j|--lista-jumpers)
             echo "$MENSAGEM_JUMPER"
             exit 0
-            ;;   
-            
-        v)
+            ;;
+        -v|--versao)
             echo "Versão 1.0"
             exit 0
             ;;
-        d)
+        -d|--verificar-disco)
             FLAG_VERIFICAR_DISCO=1
             ;;
-        n)
+        -n|--scanear-rede)
             FLAG_SCANEAR_REDE=1
-            REDE=$OPTARG
+            REDE=$2
+            shift
             ;;
-
-        z)
-            FLAG_ZABBIX_AGENT_INSTALL=1
+        -z|--instalar-zabbix)
+            FLAG_INSTALAR_AGENTE2_ZABBIX=1
             ;;
-
-        c)  FLAG_CHECK_CERT=1
-            URL="https://$OPTARG"
+        -c|--checar-certificado)
+            FLAG_CHECAR_CERTIFICADO=1
+            URL=$2
+            shift
             ;;
-
-        \?)
-            echo "Opção inválida: -$OPTARG" >&2
+        --dns-check)
+            FLAG_VALIDACAO_DNS=1
+            URL_DNS=$2
+            shift
+            ;;
+        *)
+            echo "Opção inválida: $1" >&2
             echo "$MENSAGEM_USO" >&2
             exit 1
             ;;
     esac
+    shift
 done
+
 
 # ATIVAÇÃO DE FUNÇÕES
 if [ $FLAG_VERIFICAR_DISCO -eq 1 ]; then
@@ -142,11 +161,14 @@ if [ $FLAG_SCANEAR_REDE -eq 1 ]; then
     scanear_rede "$REDE"
 fi
 
-if [ $FLAG_CHECK_CERT -eq 1 ]; then
-    check_certi "$URL"
+if [ $FLAG_CHECAR_CERTIFICADO -eq 1 ]; then
+    checar_certificado "$URL"
 fi
 
-if [ $FLAG_ZABBIX_AGENT_INSTALL -eq 1 ]; then
-    zabbix_agent_install
+if [ $FLAG_INSTALAR_AGENTE2_ZABBIX -eq 1 ]; then
+    instalar_agente2_zabbix
 fi
-# ...
+
+if [ $FLAG_VALIDACAO_DNS -eq 1 ]; then
+    validar_dns $URL_DNS
+fi
