@@ -33,8 +33,8 @@ MENSAGEM_USO="
 
         -z, --instalar-zabbix - Realiza a instalação completa do ZabbixAgent2 (Disponível por enquanto só para Ubuntu 20.04 LTS)
 
-        --dns-check - Realiza a checagem de registros DNS do tipo A
-"
+        --dns-check URL - Realiza a checagem de registros DNS do tipo A da URL informada."
+        
 MENSAGEM_JUMPER="
 
     Lista de jumpers Linux:
