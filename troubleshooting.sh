@@ -33,7 +33,10 @@ MENSAGEM_USO="
 
         -z, --instalar-zabbix - Realiza a instalação completa do ZabbixAgent2 (Disponível por enquanto só para Ubuntu).
 
-        --dns-check URL - Realiza a checagem de registros DNS do tipo A da URL informada."
+        --compactar-logs ARQUIVO - Realiza a compactação do arquivo de log especificado sem prejudicar o funcionamento do host e da aplicação em questão.
+            obs: Por enquanto só funciona com apenas UM arquivo por vez!
+
+        --checar-dns URL - Realiza a checagem de registros DNS do tipo A da URL informada."
 
 MENSAGEM_JUMPER="
 
@@ -47,12 +50,30 @@ FLAG_VERIFICAR_DISCO=0
 FLAG_SCANEAR_REDE=0
 FLAG_CHECAR_CERTIFICADO=0
 FLAG_INSTALAR_AGENTE2_ZABBIX=0
-FLAG_VALIDACAO_DNS=0
+FLAG_CHECAR_DNS=0
+FLAG_COMPACTAR_LOGS=0
 # -----------------------TESTES--------------------------------------------- #
 
 # root?
 #[ $UID -ne 0 ] && echo "Por favor, execute este programa como root" && exit 1
 # -----------------------FUNÇÕES-------------------------------------------- #
+compactar_logs() {
+    
+    #root?
+    [ $UID -ne 0 ] && echo "Por favor, execute este programa como root" && exit 1
+
+    #Buscando os atributos do arquivo de log original
+    permissao=$(stat -c "%a" "$1")
+    usuario=$(stat -c "%U" "$1")
+    grupo=$(stat -c "%G" "$1")
+
+    #Comprime e "zera" o arquivo de log original, mantendo todas as permissões para o funcionamento correto da aplicação.
+    log_arquivo=$(echo "$1" | cut -d . -f 1)
+    gzip -f9c "$log_arquivo".log > "$log_arquivo.$(date --rfc-3339=date).log.gz" && > "$log_arquivo".log
+    chmod "$permissao" "$1"
+    chown "$usuario":"$grupo" "$1"
+}
+
 verificar_disco() {
     df -hT
 }
@@ -66,7 +87,7 @@ checar_certificado() {
 
 }
 
-validar_dns() {
+checar_dns() {
     saida=$(dig $1 +short)
 
     if [ -z $saida ]; then
@@ -139,9 +160,15 @@ while [[ $# -gt 0 ]]; do
             URL=$2
             shift
             ;;
-        --dns-check)
-            FLAG_VALIDACAO_DNS=1
+        --checar-dns)
+            FLAG_CHECAR_DNS=1
             URL_DNS=$2
+            shift
+            ;;
+        
+        --compactar-logs)
+            FLAG_COMPACTAR_LOGS=1
+            ARQUIVO_LOG=$2
             shift
             ;;
         *)
@@ -171,6 +198,10 @@ if [ $FLAG_INSTALAR_AGENTE2_ZABBIX -eq 1 ]; then
     instalar_agente2_zabbix
 fi
 
-if [ $FLAG_VALIDACAO_DNS -eq 1 ]; then
-    validar_dns $URL_DNS
+if [ $FLAG_CHECAR_DNS -eq 1 ]; then
+    checar_dns $URL_DNS
+fi
+
+if [ $FLAG_COMPACTAR_LOGS -eq 1 ]; then
+    compactar_logs $ARQUIVO_LOG
 fi
