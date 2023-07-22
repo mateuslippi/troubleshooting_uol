@@ -68,8 +68,7 @@ compactar_logs() {
     grupo=$(stat -c "%G" "$1")
 
     #Comprime e "zera" o arquivo de log original, mantendo todas as permissões para o funcionamento correto da aplicação.
-    log_arquivo=$(echo "$1" | cut -d . -f 1)
-    gzip -f9c "$log_arquivo".log > "$log_arquivo.$(date --rfc-3339=date).log.gz" && > "$log_arquivo".log
+    gzip -f9c "$1" > "$1.$(date --rfc-3339=date).gz" && > "$1"
     chmod "$permissao" "$1"
     chown "$usuario":"$grupo" "$1"
 }
