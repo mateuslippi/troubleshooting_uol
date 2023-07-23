@@ -16,6 +16,7 @@
 # Histórico:
 #
 #   v1.0 24/06/2023, Mateus:
+#   v1.1 23/07/2024, Mateus: Adicionado a função "limpar_cache"
 # ------------------------------------------------------------------------ #
 # Testado em:
 #   bash 5.1.16(1)-release
@@ -88,15 +89,22 @@ compactar_logs() {
     #root?
     [ $UID -ne 0 ] && echo "Por favor, execute este programa como root" && exit 1
 
-    #Buscando os atributos do arquivo de log original
-    permissao=$(stat -c "%a" "$1")
-    usuario=$(stat -c "%U" "$1")
-    grupo=$(stat -c "%G" "$1")
+    #Checa se o arquivo passado como parâemtro realmente existe.
+    if [ -e $1 ]; then 
+        #Buscando os atributos do arquivo de log original
+        permissao=$(stat -c "%a" "$1")
+        usuario=$(stat -c "%U" "$1")
+        grupo=$(stat -c "%G" "$1")
 
-    #Comprime e "zera" o arquivo de log original, mantendo todas as permissões para o funcionamento correto da aplicação.
-    gzip -f9c "$1" > "$1.$(date --rfc-3339=date).gz" && > "$1"
-    chmod "$permissao" "$1"
-    chown "$usuario":"$grupo" "$1"
+        #Comprime e "zera" o arquivo de log original, mantendo todas as permissões para o funcionamento correto da aplicação.
+        gzip -f9c "$1" > "$1.$(date --rfc-3339=date).gz" && > "$1"
+        chmod "$permissao" "$1"
+        chown "$usuario":"$grupo" "$1"
+        
+        exit 0
+    fi
+
+    echo "O arquivo passado como parâmetro não existe" >&2 && exit 1
 }
 
 verificar_disco() {
@@ -132,7 +140,7 @@ instalar_agente2_zabbix () {
     porta=10050
     ss -ln | grep -i "$porta" > /dev/null
     if [ $? -eq 0 ]; then
-        echo "A porta $porta já está sendo utilizada. Por favor, realize o tratamento"
+        echo "A porta $porta já está sendo utilizada. Por favor, realize o tratamento" >&2
         exit 1
     fi
 
