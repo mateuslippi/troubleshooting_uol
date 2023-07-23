@@ -35,7 +35,10 @@ MENSAGEM_USO="
 
         --compactar-logs ARQUIVO - Realiza a compactação do arquivo de log especificado sem prejudicar o funcionamento do host e da aplicação em questão.
             obs: Por enquanto só funciona com apenas UM arquivo por vez!
-
+        
+        -l, --limpar-cache - Realiza a limpeza de cache do YUM (Caso o sistema seja RHEL based), de logs do journalctl (Retendo apenas o do último dia)
+            e força a rotação do logrotate.
+            
         --checar-dns URL - Realiza a checagem de registros DNS do tipo A da URL informada."
 
 MENSAGEM_JUMPER="
@@ -52,13 +55,36 @@ FLAG_CHECAR_CERTIFICADO=0
 FLAG_INSTALAR_AGENTE2_ZABBIX=0
 FLAG_CHECAR_DNS=0
 FLAG_COMPACTAR_LOGS=0
+FLAG_LIMPAR_CACHE=0
 # -----------------------TESTES--------------------------------------------- #
 
 # root?
 #[ $UID -ne 0 ] && echo "Por favor, execute este programa como root" && exit 1
 # -----------------------FUNÇÕES-------------------------------------------- #
+
+limpar_cache() {
+    #root?
+    [ $UID -ne 0 ] && echo "Por favor, execute este programa como root" && exit 1
+
+    #limpar cache yum
+
+    #Rhel based?
+    which yum > /dev/null 2>&1
+
+    if [ $? -eq 0 ]; then
+        #Limpeza de cache do yum.
+        yum clean packages && yum clean headers && yum clean metadata && yum clean all 
+        wait
+    fi
+    #Remover os logs do journalctl, exeto o do último dia
+    journalctl --vacuum-time=1
+    wait
+
+    #Forçar rotação de logs do logrotate
+    logrotate -f /etc/logrotate.conf
+}
+
 compactar_logs() {
-    
     #root?
     [ $UID -ne 0 ] && echo "Por favor, execute este programa como root" && exit 1
 
@@ -149,6 +175,8 @@ while [[ $# -gt 0 ]]; do
         -n|--scanear-rede)
             FLAG_SCANEAR_REDE=1
             REDE=$2
+            #obs: O uso deste shift é necessário para que o programa não entenda o $2 como um novo "case", se não ele vai identificar como uma "Opção inválida".
+            # afinal de contas, o "$2" neste caso é um parâmetro e não uma opção para o "case".
             shift
             ;;
         -z|--instalar-zabbix)
@@ -170,12 +198,18 @@ while [[ $# -gt 0 ]]; do
             ARQUIVO_LOG=$2
             shift
             ;;
+
+        -l|--limpar-cache)
+            FLAG_LIMPAR_CACHE=1
+            ;;
+
         *)
             echo "Opção inválida: $1" >&2
             echo "$MENSAGEM_USO" >&2
             exit 1
             ;;
     esac
+    #O uso deste shift é utilizado para descartar um "case" que já foi tratado e não deixar o prgorama em looping infinito.
     shift
 done
 
@@ -203,4 +237,8 @@ fi
 
 if [ $FLAG_COMPACTAR_LOGS -eq 1 ]; then
     compactar_logs $ARQUIVO_LOG
+fi
+
+if [ $FLAG_LIMPAR_CACHE -eq 1 ]; then
+    limpar_cache
 fi
