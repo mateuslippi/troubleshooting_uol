@@ -17,7 +17,8 @@
 #
 #   v1.0 24/06/2023, Mateus:
 #   v1.1 23/07/2023, Mateus: Adicionado a função "limpar_cache"
-#   V1.2 26/07/2023, Mateus: Adicionado a possibilidade de passarmos multiplos arquivos de log para a função "--compactar-logs"
+#   v1.2 26/07/2023, Mateus: Adicionado a possibilidade de passarmos multiplos arquivos de log para a função "--compactar-logs"
+#   v1.3 26/07/2023, Mateus: Removido as funções "verificar_disco e scanear_rede" e adicionado a função "buscar_consumo"
 # ------------------------------------------------------------------------ #
 # Testado em:
 #   bash 5.1.16(1)-release
@@ -26,21 +27,24 @@ MENSAGEM_USO="
      $(basename "$0") - [OPÇÕES]
 
         -h, --ajuda - Menu de ajuda
+
         -v, --versao - Versão do programa
-        -d, --verificar-disco - Realiza a verificação de espaço em disco e exibe
-             o sistema de arquivos utilizado nas partições.
-        -n, --scanear-rede REDE - Realiza uma varredura de hosts na rede informada e envia
-             para o arquivo 'hosts.txt'
-        -j, --lista-jumpers - Exibe uma lista de jumpers Linux.
 
-        -z, --instalar-zabbix - Realiza a instalação completa do ZabbixAgent2 (Disponível por enquanto só para Ubuntu).
+        -a, --compactar-logs ARQUIVO1 [ARQUIVO2 ARQUIVO3 ...] - Realiza a compactação dos arquivos de log especificados sem prejudicar o funcionamento do host e da aplicação em questão.
 
-        --compactar-logs ARQUIVO1 [ARQUIVO2 ARQUIVO3 ...] - Realiza a compactação dos arquivos de log especificados sem prejudicar o funcionamento do host e da aplicação em questão.
-        
+        -b, --buscar-consumo - Realiza a busca pelos 50 arquivos que mais ocupam espaço em disco do sistema.   
+
+        -c, --checar-certificado CERTIFICADO - Realiza a checagem das principais informações de um certificado SSL.
+
+        -d, --checar-dns URL - Realiza a checagem de registros DNS do tipo A da URL informada.
+
         -l, --limpar-cache - Realiza a limpeza de cache do YUM (Caso o sistema seja RHEL based), de logs do journalctl (Retendo apenas o do último dia)
             e força a rotação do logrotate.
-            
-        --checar-dns URL - Realiza a checagem de registros DNS do tipo A da URL informada."
+
+        -j, --lista-jumpers - Exibe uma lista de jumpers Linux.
+
+        -z, --instalar-zabbix - Realiza a instalação completa do ZabbixAgent2 (Disponível por enquanto só para Ubuntu).        
+        "
 
 MENSAGEM_JUMPER="
 
@@ -57,8 +61,16 @@ FLAG_INSTALAR_AGENTE2_ZABBIX=0
 FLAG_CHECAR_DNS=0
 FLAG_COMPACTAR_LOGS=0
 FLAG_LIMPAR_CACHE=0
+FLAG_BUSCAR_CONSUMO=0
 
 # -----------------------FUNÇÕES-------------------------------------------- #
+
+buscar_consumo() {
+    # root?
+    [ $UID -ne 0 ] && echo "Por favor, execute este programa como root" && exit 1
+
+    find / -xdev -type f -size +5M -exec du -sh {} ';' | sort -rh | head -n50
+}
 
 limpar_cache() {
     # root?
@@ -94,14 +106,6 @@ compactar_logs() {
             echo "O arquivo $arquivo_log passado como parâmetro não existe" >&2 && exit 1
         fi
     done
-}
-
-verificar_disco() {
-    df -hT
-}
-
-scanear_rede() {
-    nmap "$1" > hosts.txt
 }
 
 checar_certificado() {
@@ -158,48 +162,42 @@ while [[ $# -gt 0 ]]; do
             echo "$MENSAGEM_USO"
             exit 0
             ;;
-        -j|--lista-jumpers)
-            echo "$MENSAGEM_JUMPER"
-            exit 0
-            ;;
         -v|--versao)
-            echo "Versão 1.0"
+            echo "Versão 1.3"
             exit 0
             ;;
-        -d|--verificar-disco)
-            FLAG_VERIFICAR_DISCO=1
-            ;;
-        -n|--scanear-rede)
-            FLAG_SCANEAR_REDE=1
-            REDE=$2
-            # obs: O uso deste shift é necessário para que o programa não entenda o $2 como um novo "case", se não ele vai identificar como uma "Opção inválida".
-            # afinal de contas, o "$2" neste caso é um parâmetro e não uma opção para o "case".
-            shift
-            ;;
-        -z|--instalar-zabbix)
-            FLAG_INSTALAR_AGENTE2_ZABBIX=1
-            ;;
-        -c|--checar-certificado)
-            FLAG_CHECAR_CERTIFICADO=1
-            URL=$2
-            shift
-            ;;
-        --checar-dns)
-            FLAG_CHECAR_DNS=1
-            URL_DNS=$2
-            shift
-            ;;
-        --compactar-logs)
+        -a|--compactar-logs)
             FLAG_COMPACTAR_LOGS=1
             shift
             # Coletar a lista de arquivos de log passados como parâmetros
             lista_arquivos=("$@")
             break
             ;;
+        -b|--buscar-consumo)
+            FLAG_BUSCAR_CONSUMO=1
+            ;;            
+        -c|--checar-certificado)
+            FLAG_CHECAR_CERTIFICADO=1
+            URL=$2
+            # obs: O uso deste shift é necessário para que o programa não entenda o $2 como um novo "case", se não ele vai identificar como uma "Opção inválida".
+            # afinal de contas, o "$2" neste caso é um parâmetro e não uma opção para o "case".
+            shift
+            ;;
+        -d|--checar-dns)
+            FLAG_CHECAR_DNS=1
+            URL_DNS=$2
+            shift
+            ;;
         -l|--limpar-cache)
             FLAG_LIMPAR_CACHE=1
             ;;
-
+        -j|--lista-jumpers)
+            echo "$MENSAGEM_JUMPER"
+            exit 0
+            ;;
+        -z|--instalar-zabbix)
+            FLAG_INSTALAR_AGENTE2_ZABBIX=1
+            ;;
         *)
             echo "Opção inválida: $1" >&2
             echo "$MENSAGEM_USO" >&2
@@ -211,14 +209,6 @@ while [[ $# -gt 0 ]]; do
 done
 
 # ATIVAÇÃO DE FUNÇÕES
-if [ $FLAG_VERIFICAR_DISCO -eq 1 ]; then
-    verificar_disco
-fi
-
-if [ $FLAG_SCANEAR_REDE -eq 1 ]; then
-    scanear_rede "$REDE"
-fi
-
 if [ $FLAG_CHECAR_CERTIFICADO -eq 1 ]; then
     checar_certificado "$URL"
 fi
@@ -237,4 +227,8 @@ fi
 
 if [ $FLAG_LIMPAR_CACHE -eq 1 ]; then
     limpar_cache
+fi
+
+if [ $FLAG_BUSCAR_CONSUMO -eq 1 ]; then
+    buscar_consumo
 fi
