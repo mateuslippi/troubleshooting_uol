@@ -16,7 +16,8 @@
 # Histórico:
 #
 #   v1.0 24/06/2023, Mateus:
-#   v1.1 23/07/2024, Mateus: Adicionado a função "limpar_cache"
+#   v1.1 23/07/2023, Mateus: Adicionado a função "limpar_cache"
+#   V1.2 26/07/2023, Mateus: Adicionado a possibilidade de passarmos multiplos arquivos de log para a função "--compactar-logs"
 # ------------------------------------------------------------------------ #
 # Testado em:
 #   bash 5.1.16(1)-release
@@ -34,8 +35,7 @@ MENSAGEM_USO="
 
         -z, --instalar-zabbix - Realiza a instalação completa do ZabbixAgent2 (Disponível por enquanto só para Ubuntu).
 
-        --compactar-logs ARQUIVO - Realiza a compactação do arquivo de log especificado sem prejudicar o funcionamento do host e da aplicação em questão.
-            obs: Por enquanto só funciona com apenas UM arquivo por vez!
+        --compactar-logs ARQUIVO1 [ARQUIVO2 ARQUIVO3 ...] - Realiza a compactação dos arquivos de log especificados sem prejudicar o funcionamento do host e da aplicação em questão.
         
         -l, --limpar-cache - Realiza a limpeza de cache do YUM (Caso o sistema seja RHEL based), de logs do journalctl (Retendo apenas o do último dia)
             e força a rotação do logrotate.
@@ -57,54 +57,43 @@ FLAG_INSTALAR_AGENTE2_ZABBIX=0
 FLAG_CHECAR_DNS=0
 FLAG_COMPACTAR_LOGS=0
 FLAG_LIMPAR_CACHE=0
-# -----------------------TESTES--------------------------------------------- #
 
-# root?
-#[ $UID -ne 0 ] && echo "Por favor, execute este programa como root" && exit 1
 # -----------------------FUNÇÕES-------------------------------------------- #
 
 limpar_cache() {
-    #root?
+    # root?
     [ $UID -ne 0 ] && echo "Por favor, execute este programa como root" && exit 1
 
-    #limpar cache yum
+    # limpar cache yum
 
-    #Rhel based?
+    # Rhel based?
     which yum > /dev/null 2>&1
 
     if [ $? -eq 0 ]; then
-        #Limpeza de cache do yum.
+        # Limpeza de cache do yum.
         yum clean packages && yum clean headers && yum clean metadata && yum clean all 
         wait
     fi
-    #Remover os logs do journalctl, exeto o do último dia
+    # Remover os logs do journalctl, exceto o do último dia
     journalctl --vacuum-time=1
     wait
 
-    #Forçar rotação de logs do logrotate
+    # Forçar rotação de logs do logrotate
     logrotate -f /etc/logrotate.conf
 }
 
 compactar_logs() {
-    #root?
+    # root?
     [ $UID -ne 0 ] && echo "Por favor, execute este programa como root" && exit 1
 
-    #Checa se o arquivo passado como parâemtro realmente existe.
-    if [ -e $1 ]; then 
-        #Buscando os atributos do arquivo de log original
-        permissao=$(stat -c "%a" "$1")
-        usuario=$(stat -c "%U" "$1")
-        grupo=$(stat -c "%G" "$1")
-
-        #Comprime e "zera" o arquivo de log original, mantendo todas as permissões para o funcionamento correto da aplicação.
-        gzip -f9c "$1" > "$1.$(date --rfc-3339=date).gz" && > "$1"
-        chmod "$permissao" "$1"
-        chown "$usuario":"$grupo" "$1"
-        
-        exit 0
-    fi
-
-    echo "O arquivo passado como parâmetro não existe" >&2 && exit 1
+    for arquivo_log in "$@"; do
+        # Checa se o arquivo passado como parâmetro realmente existe.
+        if [ -e "$arquivo_log" ]; then
+            gzip -f9c "$arquivo_log" > "$arquivo_log.$(date --rfc-3339=date).gz" && > "$arquivo_log"           
+        else 
+            echo "O arquivo $arquivo_log passado como parâmetro não existe" >&2 && exit 1
+        fi
+    done
 }
 
 verificar_disco() {
@@ -117,26 +106,24 @@ scanear_rede() {
 
 checar_certificado() {
     curl -v --silent "https://$1" --stderr - | grep -i 'Server Certificate\|subject\|start date\|expire date'
-
 }
 
 checar_dns() {
-    saida=$(dig $1 +short)
+    saida=$(dig "$1" +short)
 
-    if [ -z $saida ]; then
+    if [ -z "$saida" ]; then
         echo "Não existe um registro DNS do tipo A associado a este host."
         exit 0
     fi
 
-    dig $1 +short
+    dig "$1" +short
 }
 
-#Função disponível por enquanto só para o Ubuntu 20.04 LTS
 instalar_agente2_zabbix () {
-    #root?
+    # root?
     [ $UID -ne 0 ] && echo "Por favor, execute este programa como root" && exit 1
 
-    #10050 aberta?
+    # 10050 aberta?
     porta=10050
     ss -ln | grep -i "$porta" > /dev/null
     if [ $? -eq 0 ]; then
@@ -144,25 +131,27 @@ instalar_agente2_zabbix () {
         exit 1
     fi
 
-    #Verificação do Ubuntu
+    # Verificação do Ubuntu
     ubuntu_versao=$(grep -i "DISTRIB_RELEASE=" /etc/lsb-release | cut -d = -f 2)
 
-    #Instação dos repositórios
+    # Instalação dos repositórios
     wget https://repo.zabbix.com/zabbix/6.0/ubuntu/pool/main/z/zabbix-release/zabbix-release_6.0-4+ubuntu"$ubuntu_versao"_all.deb
     sudo dpkg -i zabbix-release_6.0-4+ubuntu"$ubuntu_versao"_all.deb
     sudo apt update
 
-    #Instalação do Zabbix-Agent2
+    # Instalação do Zabbix-Agent2
     apt install zabbix-agent2 zabbix-agent2-plugin-*
 
-    #Inicialização pelo boot e start do zabbix-agent2
+    # Inicialização pelo boot e start do zabbix-agent2
     systemctl enable zabbix-agent2
     systemctl restart zabbix-agent2
 
 }
-# ---------------------- EXECUÇÃO ----------------------------------------- #
 
-#TRATAMENTO DE PARÂMETROS
+# ---------------------- EXECUÇÃO ----------------------------------------- #
+lista_arquivos=()
+
+# TRATAMENTO DE PARÂMETROS
 while [[ $# -gt 0 ]]; do
     case "$1" in
         -h|--ajuda)
@@ -183,7 +172,7 @@ while [[ $# -gt 0 ]]; do
         -n|--scanear-rede)
             FLAG_SCANEAR_REDE=1
             REDE=$2
-            #obs: O uso deste shift é necessário para que o programa não entenda o $2 como um novo "case", se não ele vai identificar como uma "Opção inválida".
+            # obs: O uso deste shift é necessário para que o programa não entenda o $2 como um novo "case", se não ele vai identificar como uma "Opção inválida".
             # afinal de contas, o "$2" neste caso é um parâmetro e não uma opção para o "case".
             shift
             ;;
@@ -200,13 +189,13 @@ while [[ $# -gt 0 ]]; do
             URL_DNS=$2
             shift
             ;;
-        
         --compactar-logs)
             FLAG_COMPACTAR_LOGS=1
-            ARQUIVO_LOG=$2
             shift
+            # Coletar a lista de arquivos de log passados como parâmetros
+            lista_arquivos=("$@")
+            break
             ;;
-
         -l|--limpar-cache)
             FLAG_LIMPAR_CACHE=1
             ;;
@@ -217,10 +206,9 @@ while [[ $# -gt 0 ]]; do
             exit 1
             ;;
     esac
-    #O uso deste shift é utilizado para descartar um "case" que já foi tratado e não deixar o prgorama em looping infinito.
+    # O uso deste shift é utilizado para descartar um "case" que já foi tratado e não deixar o programa em looping infinito.
     shift
 done
-
 
 # ATIVAÇÃO DE FUNÇÕES
 if [ $FLAG_VERIFICAR_DISCO -eq 1 ]; then
@@ -240,11 +228,11 @@ if [ $FLAG_INSTALAR_AGENTE2_ZABBIX -eq 1 ]; then
 fi
 
 if [ $FLAG_CHECAR_DNS -eq 1 ]; then
-    checar_dns $URL_DNS
+    checar_dns "$URL_DNS"
 fi
 
 if [ $FLAG_COMPACTAR_LOGS -eq 1 ]; then
-    compactar_logs $ARQUIVO_LOG
+    compactar_logs "${lista_arquivos[@]}"
 fi
 
 if [ $FLAG_LIMPAR_CACHE -eq 1 ]; then
