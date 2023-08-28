@@ -19,6 +19,7 @@
 #   v1.1 23/07/2023, Mateus: Adicionado a função "limpar_cache"
 #   v1.2 26/07/2023, Mateus: Adicionado a possibilidade de passarmos multiplos arquivos de log para a função "--compactar-logs"
 #   v1.3 26/07/2023, Mateus: Removido as funções "verificar_disco e scanear_rede" e adicionado a função "buscar_consumo"
+#   v1.4 28/08/2023, Mateus: Adicionado a função "Liberar Inodes"
 # ------------------------------------------------------------------------ #
 # Testado em:
 #   bash 5.1.16(1)-release
@@ -41,6 +42,8 @@ MENSAGEM_USO="
         -l, --limpar-cache - Realiza a limpeza de cache do YUM (Caso o sistema seja RHEL based), de logs do journalctl (Retendo apenas o do último dia)
             e força a rotação do logrotate.
 
+        -i, --liberar-inodes - Realiza a liberação de inodes.
+
         -j, --lista-jumpers - Exibe uma lista de jumpers Linux.
 
         -z, --instalar-zabbix - Realiza a instalação completa do ZabbixAgent2 (Disponível por enquanto só para Ubuntu).        
@@ -60,8 +63,12 @@ FLAG_CHECAR_DNS=0
 FLAG_COMPACTAR_LOGS=0
 FLAG_LIMPAR_CACHE=0
 FLAG_BUSCAR_CONSUMO=0
-
+FLAG_LIBERAR_INODES=0
 # -----------------------FUNÇÕES-------------------------------------------- #
+
+liberar_inodes() {
+    ls -la /var/spool/clientmqueue | awk '{print "rm " $9}'|sh +
+}
 
 buscar_consumo() {
     # root?
@@ -161,7 +168,7 @@ while [[ $# -gt 0 ]]; do
             exit 0
             ;;
         -v|--versao)
-            echo "Versão 1.3"
+            echo "Versão 1.4"
             exit 0
             ;;
         -a|--compactar-logs)
@@ -189,6 +196,10 @@ while [[ $# -gt 0 ]]; do
         -l|--limpar-cache)
             FLAG_LIMPAR_CACHE=1
             ;;
+        -i|--liberar-inodes)
+            FLAG_LIBERAR_INODES=1
+            ;;
+        
         -j|--lista-jumpers)
             echo "$MENSAGEM_JUMPER"
             exit 0
@@ -225,6 +236,10 @@ fi
 
 if [ $FLAG_LIMPAR_CACHE -eq 1 ]; then
     limpar_cache
+fi
+
+if [ $FLAG_LIBERAR_INODES -eq 1 ]; then
+    liberar_inodes
 fi
 
 if [ $FLAG_BUSCAR_CONSUMO -eq 1 ]; then
