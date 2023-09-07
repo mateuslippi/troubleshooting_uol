@@ -27,9 +27,9 @@
 MENSAGEM_USO="
      $(basename "$0") - [OPÇÕES]
 
-        -h, --ajuda - Menu de ajuda
+        -h, --help - Menu de ajuda
 
-        -v, --versao - Versão do programa
+        -v, --version - Versão do programa
 
         -a, --compactar-logs ARQUIVO1 [ARQUIVO2 ARQUIVO3 ...] - Realiza a compactação dos arquivos de log especificados sem prejudicar o funcionamento do host e da aplicação em questão.
 
